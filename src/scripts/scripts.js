@@ -1,4 +1,6 @@
 import {MnistData} from './data.js';
+import * as tfvis from '@tensorflow/tfjs-vis';
+import * as tf from '@tensorflow/tfjs';
 
 async function showExamples(data) {
   // Create a container in the visor
@@ -29,10 +31,8 @@ async function showExamples(data) {
   }
 }
 
-async function run() {
+export async function run() {
   const data = new MnistData();
   await data.load();
   await showExamples(data);
 }
-
-document.addEventListener('DOMContentLoaded', run);
