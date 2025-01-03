@@ -1,9 +1,11 @@
+// cpu 사용
 import '@tensorflow/tfjs-backend-cpu';
+// gpu 사용
 import '@tensorflow/tfjs-backend-webgl';
 import * as tf from '@tensorflow/tfjs';
+import * as tfvis from '@tensorflow/tfjs-vis'
 import { Typography } from '@mui/material';
 import { useEffect } from 'react';
-import * as tfvis from '@tensorflow/tfjs-vis'
 import { ModelFitArgs, Rank, Sequential, Tensor } from '@tensorflow/tfjs';
 
 type CarDataType = {
@@ -75,6 +77,8 @@ export default function SuperviserdLearning() {
     // Wrapping these calculations in a tidy will dispose any
     // intermediate tensors.
 
+    // tidy 함수는 텐서 생성과 연산 후, 자동으로 메모리를 해제해주는 함수입니다.
+    // 이 블록 내부에서 생성된 텐서들은 블록이 끝날때 자동으로 메모리에서 해제 됩니다.
     return tf.tidy(() => {
       // Step 1. 데이터 셔플링
       tf.util.shuffle(data);
@@ -93,6 +97,8 @@ export default function SuperviserdLearning() {
       const labelMax = labelTensor.max();
       const labelMin = labelTensor.min();
 
+      // min-max scaling 정규화 식
+      // normalize = x - x_min / x_max - x_min
       const normalizedInputs = inputTensor.sub(inputMin).div(inputMax.sub(inputMin));
       const normalizedLabels = labelTensor.sub(labelMin).div(labelMax.sub(labelMin));
 
@@ -118,6 +124,7 @@ export default function SuperviserdLearning() {
 
     const batchSize = 32;
     const epochs = 50;
+
     const args: any = {
       batchSize,
       epochs,
@@ -132,21 +139,67 @@ export default function SuperviserdLearning() {
     return await model.fit(inputs, labels, args);
   }
 
-  /**
-   * tfjs-vis 라이브러리로 데이터 시각화
-   * */
-  const renderVis = async () => {
-    const data = await getData();
-    console.log('data: ', data);
-    const values = data.map(d => ({
-      x: d.horsepower,
-      y: d.mpg,
+  function testModel(model: Sequential, inputData: FilteredCarDataType[], normalizationData: any) {
+    const {inputMax, inputMin, labelMin, labelMax} = normalizationData;
+
+    // Generate predictions for a uniform range of numbers between 0 and 1;
+    // We un-normalize the data by doing the inverse of the min-max scaling
+    // that we did earlier.
+    // xs : 100개 임의 예측 데이터, preds: 예측 결과 값
+    const [xs, preds] = tf.tidy(() => {
+
+      // 0 - 1 사이의 균등하게 분포된 100개의 데이터 생성
+      const xs = tf.linspace(0, 1, 100);
+      // .predict 예측함수, reshape로 xs 데이터 차원을 [100, 1] 로 변환
+      const preds: any = model.predict(xs.reshape([100, 1]));
+
+      // 데이터 역정규화
+      const unNormXs = xs
+        .mul(inputMax.sub(inputMin))
+        .add(inputMin);
+
+      const unNormPreds = preds
+        .mul(labelMax.sub(labelMin))
+        .add(labelMin);
+
+      // dataSync 로 자바스크립트배열로 변환
+      return [unNormXs.dataSync(), unNormPreds.dataSync()];
+    });
+
+    const predictedPoints = Array.from(xs).map((val, i) => {
+      return {x: val, y: preds[i]}
+    });
+
+    const originalPoints = inputData.map(d => ({
+      x: d.horsepower, y: d.mpg,
     }));
 
-    // model 생성
-    const model:Sequential = createModel();
+    tfvis.render.scatterplot(
+      {name: 'Model Predictions vs Original Data'},
+      {values: [originalPoints, predictedPoints], series: ['original', 'predicted']},
+      {
+        xLabel: 'Horsepower',
+        yLabel: 'MPG',
+        height: 300
+      }
+    );
+  }
 
-    tfvis.show.modelSummary({ name: 'Model Summary' }, model);
+  /**
+   * 2D 데이터로 예측하기
+   * */
+  const training2DModel = async () => {
+    // 학습 데이터 fetch
+    const data = await getData();
+    console.log('data: ', data);
+
+    // 그래프 X 축, Y 축 데이터 set
+    const values = data.map(d => ({
+      x: d.horsepower,
+      y: d.mpg
+    }));
+
+    // 학습 데이터 그래프 show
     tfvis.render.scatterplot(
       {name: 'Horsepower v MPG'},
       {values},
@@ -156,20 +209,26 @@ export default function SuperviserdLearning() {
         height: 300
       }
     );
+
+    // model 생성
+    const model:Sequential = createModel();
+    tfvis.show.modelSummary({ name: 'Model Summary' }, model);
+
     // 데이터 변환
     const tensorData = convertToTensor(data);
     const { inputs, labels } = tensorData;
-    trainModel(model, inputs, labels);
+    await trainModel(model, inputs, labels);
+    testModel(model, data, tensorData);
     console.log('Done Training');
   }
 
   useEffect(() => {
-    renderVis();
+    training2DModel();
   }, []);
 
   return (
     <>
-      <Typography variant="body2">HELLO</Typography>
+      <Typography variant="body2">2D 데이터에서 예측값 내기</Typography>
     </>
   );
 }

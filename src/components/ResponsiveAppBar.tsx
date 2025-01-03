@@ -13,8 +13,12 @@ const PATHS = [
     name: '분류'
   },
   {
-    path: '/lemonade',
-    name: '레모네이드'
+    path: '/supervised',
+    name: '2D 데이터 학습'
+  },
+  {
+    path: '/cnn/image',
+    name: '손글씨 학습'
   }
 ]
 
